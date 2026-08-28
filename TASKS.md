@@ -177,10 +177,18 @@ side concern.
 - Do not open a database connection here.
 - **Every error raised from this module is a `ConfigError`**, including
   wrapped YAML parse errors and missing files.
-- **Validate the type of every scalar before using it.** YAML turns
-  `when: true` into a `bool` and `path: 123` into an `int`. Handing either to
-  `str`-expecting code leaks a raw `TypeError`/`AttributeError` past the
-  `ConfigError` contract. Check the type first, then use the value.
+- **Validate the type of every scalar before using it, in `app.yml` exactly
+  as in the endpoint files.** YAML turns `when: true` into a `bool` and
+  `path: 123` into an `int`. Handing either to `str`-expecting code leaks a
+  raw `TypeError`/`AttributeError` past the `ConfigError` contract. Check the
+  type first, then use the value. This applies to `database.url`,
+  `database.init_sql`, `token`, `token_env`, `subject` and `roles` just as
+  much as to endpoint keys — `load_app` and `load_endpoint` are two halves of
+  one contract.
+- **`bool` is a subclass of `int` in Python.** Any field that must be an
+  integer — `check.status`, `response.status`, `response.when_empty` — has to
+  reject `True`/`False` explicitly, or a YAML `when_empty: true` becomes an
+  HTTP status of `True`.
 
 **DEFINITION OF DONE**
 - [ ] Dataclasses: `ParamSpec(name, location, type, required, default,
@@ -241,6 +249,11 @@ side concern.
       `token_env` is read from `os.environ`; an unset variable is a
       `ConfigError` naming the variable. `AppConfig.tokens` maps the resolved
       token string to `{"subject": ..., "roles": [...]}`.
+- [ ] `token`, `token_env` and `subject` must be strings — never coerced with
+      `str()`, or `token: null` silently becomes the usable token `"None"`.
+      `roles` must be a list of strings: `roles: "admin"` would turn
+      `'admin' in auth.roles` into a substring match, so a role named `adm`
+      would pass an admin-only check.
 - [ ] Endpoint files are `endpoints/*.yml` and `endpoints/*.yaml`, loaded in
       sorted filename order. A file whose top level is not a mapping is a
       `ConfigError`. An empty `endpoints/` directory yields `[]`.

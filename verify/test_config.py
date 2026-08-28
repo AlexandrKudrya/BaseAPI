@@ -320,6 +320,14 @@ class TestNonStringScalars(unittest.TestCase):
     def test_a_non_integer_when_empty(self):
         self.assertConfigError(endpoint_data(response={"when_empty": "404"}))
 
+    def test_a_boolean_is_not_an_integer_status(self):
+        # YAML `true` is an int subclass in Python; every status field must
+        # reject it, not quietly use True as an HTTP status code.
+        self.assertConfigError(endpoint_data(response={"when_empty": True}))
+        self.assertConfigError(endpoint_data(response={"status": True}))
+        self.assertConfigError(endpoint_data(checks=[
+            {"when": "params.note_id > 0", "status": True}]))
+
     def test_a_non_string_param_location_or_type(self):
         self.assertConfigError(endpoint_data(
             params={"note_id": {"in": 1, "type": "int"}}))
@@ -619,6 +627,124 @@ class TestLoadApp(unittest.TestCase):
 
     def test_a_missing_database_section_is_a_config_error(self):
         self.write("app.yml", "auth:\n  tokens: []\n")
+        self.write_endpoint("a.yml", "a_ep")
+        with self.assertRaises(ConfigError):
+            load_app(self.dir)
+
+    def test_a_non_string_database_url_is_a_config_error(self):
+        # This one must not be allowed to slip through to db.connect: T9
+        # requires every configuration failure to surface from create_app.
+        for value in ("123", "true", "[a, b]", "null"):
+            with self.subTest(value=value):
+                self.write("app.yml", "database:\n  url: %s\n" % value)
+                self.write_endpoint("a.yml", "a_ep")
+                with self.assertRaises(ConfigError):
+                    load_app(self.dir)
+
+    def test_a_non_string_init_sql_is_a_config_error(self):
+        for value in ("123", "true", "[a, b]"):
+            with self.subTest(value=value):
+                self.write("app.yml",
+                           'database:\n  url: "sqlite:///:memory:"\n'
+                           "  init_sql: %s\n" % value)
+                self.write_endpoint("a.yml", "a_ep")
+                with self.assertRaises(ConfigError):
+                    load_app(self.dir)
+
+    def test_a_non_string_token_is_a_config_error(self):
+        for value in ("123", "true", "null", "[a]"):
+            with self.subTest(value=value):
+                self.write("app.yml",
+                           'database:\n  url: "sqlite:///:memory:"\n'
+                           "auth:\n  tokens:\n"
+                           "    - token: %s\n"
+                           '      subject: "alice"\n' % value)
+                self.write_endpoint("a.yml", "a_ep")
+                with self.assertRaises(ConfigError):
+                    load_app(self.dir)
+
+    def test_a_null_token_never_becomes_the_string_none(self):
+        self.write("app.yml", """
+            database:
+              url: "sqlite:///:memory:"
+            auth:
+              tokens:
+                - token: null
+                  subject: "alice"
+        """)
+        self.write_endpoint("a.yml", "a_ep")
+        with self.assertRaises(ConfigError):
+            load_app(self.dir)
+
+    def test_a_non_string_token_env_is_a_config_error(self):
+        for value in ("123", "true", "[a]"):
+            with self.subTest(value=value):
+                self.write("app.yml",
+                           'database:\n  url: "sqlite:///:memory:"\n'
+                           "auth:\n  tokens:\n"
+                           "    - token_env: %s\n"
+                           '      subject: "alice"\n' % value)
+                self.write_endpoint("a.yml", "a_ep")
+                with self.assertRaises(ConfigError):
+                    load_app(self.dir)
+
+    def test_a_non_string_subject_is_a_config_error(self):
+        self.write("app.yml", """
+            database:
+              url: "sqlite:///:memory:"
+            auth:
+              tokens:
+                - token: "t"
+                  subject: 5
+        """)
+        self.write_endpoint("a.yml", "a_ep")
+        with self.assertRaises(ConfigError):
+            load_app(self.dir)
+
+    def test_roles_must_be_a_list_of_strings(self):
+        # `roles: "admin"` would make `'admin' in auth.roles` a substring
+        # match, so a role named "adm" would pass an admin-only check.
+        for value in ('"admin"', "5", "true", "[1, 2]", "{a: b}"):
+            with self.subTest(value=value):
+                self.write("app.yml",
+                           'database:\n  url: "sqlite:///:memory:"\n'
+                           "auth:\n  tokens:\n"
+                           '    - token: "t"\n'
+                           '      subject: "alice"\n'
+                           "      roles: %s\n" % value)
+                self.write_endpoint("a.yml", "a_ep")
+                with self.assertRaises(ConfigError):
+                    load_app(self.dir)
+
+    def test_a_valid_roles_list_still_loads(self):
+        self.write("app.yml", """
+            database:
+              url: "sqlite:///:memory:"
+            auth:
+              tokens:
+                - token: "t"
+                  subject: "alice"
+                  roles: ["admin", "staff"]
+        """)
+        self.write_endpoint("a.yml", "a_ep")
+        self.assertEqual(load_app(self.dir).tokens["t"]["roles"],
+                         ["admin", "staff"])
+
+    def test_sections_that_should_be_mappings_or_lists_but_are_not(self):
+        for body in ("database: 5\n",
+                     'database:\n  url: "sqlite:///:memory:"\nauth: 5\n',
+                     'database:\n  url: "sqlite:///:memory:"\n'
+                     "auth:\n  tokens: 5\n",
+                     'database:\n  url: "sqlite:///:memory:"\n'
+                     "auth:\n  tokens:\n    - 5\n"):
+            with self.subTest(body=body):
+                self.write("app.yml", body)
+                self.write_endpoint("a.yml", "a_ep")
+                with self.assertRaises(ConfigError):
+                    load_app(self.dir)
+
+    def test_an_app_yml_that_is_not_a_mapping_is_a_config_error(self):
+        self.write("app.yml", "- just\n- a\n- list\n")
         self.write_endpoint("a.yml", "a_ep")
         with self.assertRaises(ConfigError):
             load_app(self.dir)
