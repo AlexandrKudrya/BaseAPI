@@ -1,4 +1,4 @@
-# BaseAPI — Tasks
+﻿# BaseAPI — Tasks
 
 Work through tasks in order. **One task at a time.** After each task, run its
 `VERIFY` command and report before starting the next one.
@@ -8,17 +8,17 @@ Every command below is run from the project root. `PY` means
 
 | ID | Task | Depends on | Done |
 |---|---|---|---|
-| T0 | Confirm the two authorized dependencies are present | — | [ ] |
-| T1 | Errors and the check expression language | T0 | [ ] |
-| T2 | SQL named parameters | T0 | [ ] |
-| T3 | Config loading and validation | T1, T2 | [ ] |
-| T4 | Database adapters | T2 | [ ] |
-| T5 | Hook resolution | T0 | [ ] |
-| T6 | Response mapping | T1 | [ ] |
-| T7 | Bearer-token authentication | T1 | [ ] |
-| T8 | The request pipeline | T3, T6, T7 | [ ] |
-| T9 | The FastAPI layer | T4, T5, T8 | [ ] |
-| T10 | The example project and FORMAT.md | T9 | [ ] |
+| T0 | Confirm the two authorized dependencies are present | — | [x] |
+| T1 | Errors and the check expression language | T0 | [x] |
+| T2 | SQL named parameters | T0 | [x] |
+| T3 | Config loading and validation | T1, T2 | [x] |
+| T4 | Database adapters | T2 | [x] |
+| T5 | Hook resolution | T0 | [x] |
+| T6 | Response mapping | T1 | [x] |
+| T7 | Bearer-token authentication | T1 | [x] |
+| T8 | The request pipeline | T3, T6, T7 | [x] |
+| T9 | The FastAPI layer | T4, T5, T8 | [x] |
+| T10 | The example project and FORMAT.md | T9 | [x] |
 
 ---
 

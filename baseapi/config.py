@@ -302,7 +302,9 @@ def load_endpoint(data, *, source="<memory>"):
     if not isinstance(response_status, int) or isinstance(response_status, bool):
         raise ConfigError("%s: response.status must be an integer" % source)
     when_empty = raw_response.get("when_empty", 404)
-    if "when_empty" in raw_response and not isinstance(when_empty, int):
+    if "when_empty" in raw_response and (
+        not isinstance(when_empty, int) or isinstance(when_empty, bool)
+    ):
         raise ConfigError(
             "%s: response.when_empty must be an integer" % source
         )
@@ -362,9 +364,13 @@ def load_app(directory):
     if "url" not in db:
         raise ConfigError("app.yml: database.url is required")
     database_url = db["url"]
+    if not isinstance(database_url, str):
+        raise ConfigError("app.yml: database.url must be a string")
 
     init_sql = None
     if "init_sql" in db:
+        if not isinstance(db["init_sql"], str):
+            raise ConfigError("app.yml: database.init_sql must be a string")
         init_path = os.path.join(directory, db["init_sql"])
         if not os.path.isfile(init_path):
             raise ConfigError("missing init_sql file: %s" % db["init_sql"])
@@ -441,11 +447,25 @@ def _parse_tokens(auth):
         if "subject" not in entry:
             raise ConfigError("app.yml: a token needs a subject")
         subject = entry["subject"]
+        if not isinstance(subject, str):
+            raise ConfigError("app.yml: a token subject must be a string")
         roles = entry.get("roles", [])
+        # `roles: "admin"` would make `'admin' in auth.roles` a substring
+        # match, so a role named "adm" would pass an admin-only check.
+        if not isinstance(roles, list) or not all(
+            isinstance(role, str) for role in roles
+        ):
+            raise ConfigError("app.yml: token roles must be a list of strings")
         if has_token:
-            value = str(entry["token"])
+            # Never str() this: `token: null` would become the usable token
+            # string "None".
+            value = entry["token"]
+            if not isinstance(value, str):
+                raise ConfigError("app.yml: a token must be a string")
         else:
             variable = entry["token_env"]
+            if not isinstance(variable, str):
+                raise ConfigError("app.yml: token_env must be a string")
             value = os.environ.get(variable)
             if value is None:
                 raise ConfigError(
