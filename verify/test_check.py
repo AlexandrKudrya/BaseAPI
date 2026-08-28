@@ -303,6 +303,90 @@ class TestSqlErrors(CheckTestCase):
         self.assertIn("bad_2", report)
 
 
+class TestUnbindableParameters(CheckTestCase):
+    """An optional parameter with no default is simply absent from the params
+    dict, so the driver gets no value to bind and the request dies with a 500.
+    Nothing else catches this: the config is valid and the SQL compiles."""
+
+    def test_an_optional_sql_parameter_without_a_default_is_reported(self):
+        self.project.write("endpoints/search.yml", """
+            name: search_notes
+            method: GET
+            path: /notes
+            params:
+              q: { in: query, type: str }
+            query:
+              sql: "SELECT id FROM notes WHERE :q IS NULL OR title = :q"
+              returns: many
+        """)
+        code, report = self.run_check()
+        self.assertEqual(code, 1)
+        self.assertIn("search_notes", report)
+        self.assertIn("q", report)
+        self.assertIn("default", report)
+
+    def test_an_explicit_null_default_is_accepted(self):
+        self.project.write("endpoints/search.yml", """
+            name: search_notes
+            method: GET
+            path: /notes
+            params:
+              q: { in: query, type: str, default: null }
+            query:
+              sql: "SELECT id FROM notes WHERE :q IS NULL OR title = :q"
+              returns: many
+        """)
+        code, report = self.run_check()
+        self.assertEqual(code, 0, report)
+
+    def test_a_required_parameter_is_accepted(self):
+        self.project.write("endpoints/one.yml", """
+            name: get_note
+            method: GET
+            path: /notes/{note_id}
+            params:
+              note_id: { in: path, type: int, required: true }
+            query:
+              sql: "SELECT id FROM notes WHERE id = :note_id"
+              returns: one
+        """)
+        code, report = self.run_check()
+        self.assertEqual(code, 0, report)
+
+    def test_an_optional_parameter_not_used_in_sql_is_fine(self):
+        self.project.write("endpoints/list.yml", """
+            name: list_notes
+            method: GET
+            path: /notes
+            params:
+              verbose: { in: query, type: bool }
+            checks:
+              - when: "params.verbose == true or params.verbose == null"
+                status: 400
+                message: "no"
+            query:
+              sql: "SELECT id FROM notes"
+              returns: many
+        """)
+        code, report = self.run_check()
+        self.assertEqual(code, 0, report)
+
+    def test_an_optional_auth_parameter_used_in_sql_is_reported(self):
+        self.project.write("endpoints/mine.yml", """
+            name: my_notes
+            method: GET
+            path: /mine
+            params:
+              subject: { in: auth, type: str }
+            query:
+              sql: "SELECT id FROM notes WHERE title = :subject"
+              returns: many
+        """)
+        code, report = self.run_check()
+        self.assertEqual(code, 1)
+        self.assertIn("my_notes", report)
+
+
 class TestPostgres(CheckTestCase):
     """psycopg is not installed, so check must not try to connect."""
 

@@ -41,6 +41,7 @@ def check(directory):
         return 1, "FAILED\n  config: %s" % exc
 
     problems = []
+    problems.extend(_check_bindable(config))
     problems.extend(_check_hooks(config))
 
     notes = []
@@ -54,6 +55,29 @@ def check(directory):
         return 1, "FAILED\n%s\n\n%d problem(s)" % (body, len(problems))
 
     return 0, _report(config, notes)
+
+
+def _check_bindable(config):
+    """Every :name in a statement must always have a value to bind.
+
+    An optional parameter with no declared default is left out of the params
+    dict when the caller omits it, and the driver then refuses the statement.
+    The config is valid and the SQL compiles, so this is the one failure mode
+    that only shows up as a 500 in production.
+    """
+    problems = []
+    for endpoint in config.endpoints:
+        for name in dialect.param_names(endpoint.query.sql):
+            spec = endpoint.params.get(name)
+            if spec is None or spec.required or spec.has_default:
+                continue
+            problems.append(
+                "%s: parameter %r is used in the SQL but is optional with no "
+                "default, so it has nothing to bind when the caller omits it "
+                "- add `default: null` or `required: true`"
+                % (endpoint.name, name)
+            )
+    return problems
 
 
 def _check_hooks(config):
