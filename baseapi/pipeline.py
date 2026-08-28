@@ -119,8 +119,8 @@ def coerce_params(endpoint, *, path=None, query=None, body=None, headers=None,
     return result
 
 
-def handle(endpoint, *, db, path=None, query=None, body=None, auth=None,
-           hooks=None):
+def handle(endpoint, *, db, path=None, query=None, body=None, headers=None,
+           auth=None, hooks=None):
     """Run one endpoint against one request and return a (status, body) pair."""
     if hooks is None:
         hooks = {}
@@ -134,7 +134,7 @@ def handle(endpoint, *, db, path=None, query=None, body=None, auth=None,
     # 2. Coercion.
     try:
         params = coerce_params(endpoint, path=path, query=query, body=body,
-                               auth=auth)
+                               headers=headers, auth=auth)
     except ApiError as exc:
         return _error(exc.status, exc.message)
 

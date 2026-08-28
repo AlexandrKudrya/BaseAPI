@@ -86,6 +86,7 @@ def _make_handler(endpoint, database, resolved_hooks, tokens):
             path=path,
             query=query,
             body=body,
+            headers=headers,
             auth=identity,
             hooks=resolved_hooks,
         )

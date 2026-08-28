@@ -119,6 +119,14 @@ def _parse_params(raw_params, where):
             raise ConfigError("%s: parameter %r missing 'type'" % (where, name))
         location = spec["in"]
         typ = spec["type"]
+        if not isinstance(location, str):
+            raise ConfigError(
+                "%s: parameter %r 'in' must be a string" % (where, name)
+            )
+        if not isinstance(typ, str):
+            raise ConfigError(
+                "%s: parameter %r 'type' must be a string" % (where, name)
+            )
         if location not in _PARAM_LOCATIONS:
             raise ConfigError(
                 "%s: unknown in location %r for parameter %r"
@@ -128,8 +136,12 @@ def _parse_params(raw_params, where):
             raise ConfigError(
                 "%s: unknown type %r for parameter %r" % (where, typ, name)
             )
+        if "required" in spec and not isinstance(spec["required"], bool):
+            raise ConfigError(
+                "%s: parameter %r 'required' must be a boolean" % (where, name)
+            )
         has_default = "default" in spec
-        required = bool(spec.get("required", False))
+        required = spec.get("required", False)
         default = spec.get("default") if has_default else None
         params[name] = ParamSpec(
             name=name,
@@ -157,8 +169,14 @@ def _parse_checks(raw_checks, where):
                 "%s: a check must have exactly one of 'when' or 'hook'" % where
             )
         status = spec.get("status", 400)
+        if not isinstance(status, int) or isinstance(status, bool):
+            raise ConfigError("%s: check 'status' must be an integer" % where)
         message = spec.get("message", "check failed")
+        if not isinstance(message, str):
+            raise ConfigError("%s: check 'message' must be a string" % where)
         if has_when:
+            if not isinstance(spec["when"], str):
+                raise ConfigError("%s: check 'when' must be a string" % where)
             checks.append(
                 CheckSpec(
                     expression=expr.parse(spec["when"]),
@@ -168,6 +186,8 @@ def _parse_checks(raw_checks, where):
                 )
             )
         else:
+            if not isinstance(spec["hook"], str):
+                raise ConfigError("%s: check 'hook' must be a string" % where)
             _validate_hook_ref(spec["hook"], where)
             checks.append(
                 CheckSpec(
@@ -195,8 +215,15 @@ def load_endpoint(data, *, source="<memory>"):
         if key not in data:
             raise ConfigError("%s: missing required %r" % (source, key))
 
+    if not isinstance(data["name"], str):
+        raise ConfigError("%s: name must be a string" % source)
+    if not isinstance(data["method"], str):
+        raise ConfigError("%s: method must be a string" % source)
+    if not isinstance(data["path"], str):
+        raise ConfigError("%s: path must be a string" % source)
+
     name = data["name"]
-    method = str(data["method"]).upper()
+    method = data["method"].upper()
     if method not in _METHODS:
         raise ConfigError(
             "%s: unsupported method %r" % (source, data["method"])
@@ -204,6 +231,10 @@ def load_endpoint(data, *, source="<memory>"):
     path = data["path"]
     if not path.startswith("/"):
         raise ConfigError("%s: path must start with '/': %r" % (source, path))
+
+    summary_raw = data.get("summary", "")
+    if not isinstance(summary_raw, str):
+        raise ConfigError("%s: summary must be a string" % source)
 
     auth = data.get("auth", "none")
     if auth not in ("required", "none"):
@@ -244,7 +275,11 @@ def load_endpoint(data, *, source="<memory>"):
     if "returns" not in raw_query:
         raise ConfigError("%s: query.returns is required" % source)
     sql = raw_query["sql"]
+    if not isinstance(sql, str):
+        raise ConfigError("%s: query.sql must be a string" % source)
     returns = raw_query["returns"]
+    if not isinstance(returns, str):
+        raise ConfigError("%s: query.returns must be a string" % source)
     if returns not in _RETURNS_MODES:
         raise ConfigError(
             "%s: unknown returns mode %r" % (source, returns)
@@ -264,7 +299,13 @@ def load_endpoint(data, *, source="<memory>"):
         raw_response, ("status", "when_empty", "transform", "fields"), source
     )
     response_status = raw_response.get("status", 200)
+    if not isinstance(response_status, int) or isinstance(response_status, bool):
+        raise ConfigError("%s: response.status must be an integer" % source)
     when_empty = raw_response.get("when_empty", 404)
+    if "when_empty" in raw_response and not isinstance(when_empty, int):
+        raise ConfigError(
+            "%s: response.when_empty must be an integer" % source
+        )
     if "when_empty" in raw_response and returns != "one":
         raise ConfigError(
             "%s: response.when_empty is only allowed when returns is 'one'"
@@ -284,7 +325,7 @@ def load_endpoint(data, *, source="<memory>"):
         name=name,
         method=method,
         path=path,
-        summary=data.get("summary", ""),
+        summary=summary_raw,
         auth=auth,
         params=params,
         checks=checks,
