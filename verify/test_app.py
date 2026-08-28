@@ -340,6 +340,48 @@ class TestHeaderParameters(AppTestCase):
         self.assertIn("x_trace_id", response.json()["error"]["message"])
 
 
+class TestRouteSpecificity(AppTestCase):
+    """A literal segment must win over a placeholder no matter what the
+    endpoint files are called. Registration order follows sorted filenames, so
+    without specificity ordering `/things/count` would be swallowed by
+    `/things/{thing_id}` purely because "aaa.yml" sorts before "zzz.yml"."""
+
+    def build(self):
+        super().build()
+        # deliberately named so the placeholder route loads first
+        self.project.write("endpoints/aaa_placeholder.yml", """
+            name: get_by_id
+            method: GET
+            path: /things/{thing_id}
+            params:
+              thing_id: { in: path, type: int, required: true }
+            query:
+              sql: "SELECT :thing_id AS id"
+              returns: one
+        """)
+        self.project.write("endpoints/zzz_literal.yml", """
+            name: count_things
+            method: GET
+            path: /things/count
+            query:
+              sql: "SELECT 42 AS total"
+              returns: one
+        """)
+
+    def test_the_literal_route_wins_over_the_placeholder(self):
+        response = self.client().get("/things/count")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json(), {"total": 42})
+
+    def test_the_placeholder_route_still_works(self):
+        response = self.client().get("/things/7")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"id": 7})
+
+    def test_a_genuinely_unmatched_path_is_still_404(self):
+        self.assertEqual(self.client().get("/things/1/extra").status_code, 404)
+
+
 class TestStartupFailures(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

@@ -43,13 +43,25 @@ def create_app(directory):
     )
 
     app = FastAPI()
-    for endpoint in config.endpoints:
+    # Starlette matches routes in registration order, and endpoints arrive in
+    # sorted-filename order, so without this a `/things/{id}` route declared in
+    # an earlier-sorting file would swallow `/things/count`. Register the more
+    # specific path first instead, and the filename stops mattering.
+    for endpoint in sorted(config.endpoints, key=_specificity):
         app.add_api_route(
             endpoint.path,
             _make_handler(endpoint, database, resolved_hooks, config.tokens),
             methods=[endpoint.method],
         )
     return app
+
+
+def _specificity(endpoint):
+    """Sort key placing literal segments ahead of placeholders."""
+    return [
+        (1, "") if segment.startswith("{") else (0, segment)
+        for segment in endpoint.path.split("/")
+    ]
 
 
 def _make_handler(endpoint, database, resolved_hooks, tokens):
