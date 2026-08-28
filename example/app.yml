@@ -1,0 +1,20 @@
+# App-level configuration for the example notes API.
+# Two things live here (and only here): the database and the auth tokens.
+
+database:
+  # In-memory SQLite: nothing is ever written to disk, so running the
+  # example leaves no .db file behind.
+  url: "sqlite:///:memory:"
+  # A SQL script run once at connect time to create and seed the table.
+  init_sql: "schema.sql"
+
+auth:
+  # Static bearer tokens. Each token maps to an identity exposed to
+  # expressions as auth.subject and auth.roles.
+  tokens:
+    - token: "dev-token"       # the administrator / developer
+      subject: "alice"
+      roles: ["admin"]
+    - token: "reader-token"    # a read-only user
+      subject: "bob"
+      roles: ["reader"]

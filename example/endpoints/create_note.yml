@@ -1,0 +1,28 @@
+# Create a note.
+# Requires a token; the authenticated caller is bound as the owner, which is
+# how a write statement ties a row to the person who wrote it.
+
+name: create_note
+method: POST
+path: /notes
+auth: required
+summary: "Create a note owned by the caller."
+
+params:
+  title:   { in: body, type: str, required: true }
+  body:    { in: body, type: str, required: true }
+  subject: { in: auth, type: str, required: true }   # from the token identity
+
+query:
+  # RETURNING id hands the new row back so the response can include it.
+  sql: >
+    INSERT INTO notes (title, body, owner)
+    VALUES (:title, :body, :subject)
+    RETURNING id
+  returns: one
+
+response:
+  status: 201              # created
+  fields:
+    id: "row.id"
+    owner: "auth.subject"

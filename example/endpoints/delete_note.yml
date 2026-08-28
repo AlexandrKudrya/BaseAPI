@@ -1,0 +1,26 @@
+# Delete a note.
+# Requires a token and an admin role, enforced with a Python hook.
+
+name: delete_note
+method: DELETE
+path: /notes/{note_id}
+auth: required
+summary: "Delete a note (admin only)."
+
+params:
+  note_id: { in: path, type: int, required: true }
+
+checks:
+  # A hook check: the named Python function must return a truthy value.
+  - hook: "hooks:is_admin"
+    status: 403
+    message: "only admins may delete"
+
+query:
+  sql: "DELETE FROM notes WHERE id = :note_id"
+  returns: none           # no rows come back
+
+response:
+  fields:
+    # For returns:none the only available root is result.
+    deleted: "result.rowcount"

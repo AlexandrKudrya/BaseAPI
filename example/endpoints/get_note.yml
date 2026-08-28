@@ -1,0 +1,29 @@
+# Fetch a single note by id.
+# No auth. A business check rejects non-positive ids before the query runs.
+
+name: get_note
+method: GET
+path: /notes/{note_id}
+summary: "Return one note by id."
+
+params:
+  # A path placeholder must line up with a declared in:path parameter.
+  note_id: { in: path, type: int, required: true }
+
+checks:
+  # An expression check: evaluated against the coerced params.
+  - when: "params.note_id > 0"
+    status: 400
+    message: "note_id must be positive"
+
+query:
+  sql: "SELECT id, title, body, owner FROM notes WHERE id = :note_id"
+  returns: one           # a single object, or when_empty below
+
+response:
+  when_empty: 404        # an unknown id produces this HTTP status
+  fields:
+    id: "row.id"
+    title: "row.title"
+    text: "row.body"
+    owner: "row.owner"

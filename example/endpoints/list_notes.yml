@@ -1,0 +1,19 @@
+# List every note.
+# No auth, returns many rows as a JSON array.
+
+name: list_notes
+method: GET
+path: /notes
+summary: "Return all notes."
+
+query:
+  sql: "SELECT id, title, body, owner FROM notes ORDER BY id"
+  returns: many          # the response body is a JSON array
+
+response:
+  # Map columns to the output shape. The body column is exposed as "text".
+  fields:
+    id: "row.id"
+    title: "row.title"
+    text: "row.body"
+    owner: "row.owner"
