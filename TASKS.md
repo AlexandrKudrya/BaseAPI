@@ -177,6 +177,10 @@ side concern.
 - Do not open a database connection here.
 - **Every error raised from this module is a `ConfigError`**, including
   wrapped YAML parse errors and missing files.
+- **Validate the type of every scalar before using it.** YAML turns
+  `when: true` into a `bool` and `path: 123` into an `int`. Handing either to
+  `str`-expecting code leaks a raw `TypeError`/`AttributeError` past the
+  `ConfigError` contract. Check the type first, then use the value.
 
 **DEFINITION OF DONE**
 - [ ] Dataclasses: `ParamSpec(name, location, type, required, default,
@@ -329,6 +333,15 @@ Turn a `"module:function"` string into a real callable, importing the user's
 - [ ] When `base_dir` is given it is prepended to `sys.path` for the import
       and **removed again afterwards, including when the import fails** — use
       `try/finally`.
+- [ ] When `base_dir` is given, the module is resolved **from that
+      directory**, even if a module of the same name was already imported
+      from a different one. Two API projects each shipping a plain `hooks.py`
+      must get their own functions. `importlib.import_module` alone does not
+      do this: it returns whatever `sys.modules` already holds under that
+      name. Before importing, drop any cached entry for the top-level module
+      name — and its submodules — whose `__file__` is not inside `base_dir`.
+- [ ] A callable already returned by an earlier `resolve_hook` keeps working
+      unchanged after a later call resolves the same name elsewhere.
 - [ ] A dotted module path (`pkg.checks:fn`) works.
 - [ ] A module that cannot be imported, an attribute that does not exist, and
       an attribute that is not callable each raise `ConfigError`, and the
@@ -458,7 +471,11 @@ This is the whole product, and it is deliberately free of HTTP.
       (including `None`), that is a 422.
 - [ ] Unknown extra keys in any source are ignored.
 - [ ] Exports `handle(endpoint, *, db, path=None, query=None, body=None,
-      auth=None, hooks=None) -> tuple[int, Any]`.
+      headers=None, auth=None, hooks=None) -> tuple[int, Any]`, forwarding
+      **all four** request sources — including `headers` — to
+      `coerce_params`. An `in: header` parameter that works in
+      `coerce_params` but never receives a value through `handle` is a dead
+      feature, not a passing task.
 - [ ] `handle` runs exactly this order and stops at the first failure:
       1. If `endpoint.auth == "required"` and `auth` is falsy — 401.
       2. `coerce_params` — 422 on failure.
@@ -524,8 +541,11 @@ no validation, no business logic, no mapping.
 - [ ] One route per endpoint, registered with its own `method` and `path`.
       FastAPI's `{placeholder}` syntax already matches the YAML `path`.
 - [ ] Each handler reads path parameters, query parameters, headers and — for
-      `POST`/`PUT`/`PATCH` — the JSON body. A body that is absent or not valid
-      JSON is passed along as `None`, never raised.
+      `POST`/`PUT`/`PATCH` — the JSON body, and passes **every one of them**
+      to `pipeline.handle`, headers included. The request headers serve two
+      separate purposes: `Authorization` for authentication, and any
+      `in: header` parameter the endpoint declares. A body that is absent or
+      not valid JSON is passed along as `None`, never raised.
 - [ ] When `endpoint.auth == "required"`, the `Authorization` header goes
       through `auth.authenticate`; a raised `ApiError` becomes that status and
       the standard error body. When it is `"none"`, the identity is

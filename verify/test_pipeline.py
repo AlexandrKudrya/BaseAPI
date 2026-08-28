@@ -187,6 +187,31 @@ class TestCoerceSources(unittest.TestCase):
                auth={"subject": "alice", "roles": []})
         self.assertEqual(db.calls[0][1], {"title": "hi", "subject": "alice"})
 
+    def test_a_header_parameter_survives_the_trip_through_handle(self):
+        # coerce_params reads headers, but the value has to actually reach it
+        # from handle, or `in: header` is documented and dead.
+        endpoint = make(
+            path="/notes",
+            params={"x_trace_id": {"in": "header", "type": "str",
+                                   "required": True}},
+            query={"sql": "SELECT :x_trace_id AS t", "returns": "one"},
+        )
+        db = FakeDb(rows=[{"t": "abc"}])
+        status, _ = handle(endpoint, db=db, headers={"X-Trace-Id": "abc"})
+        self.assertEqual(status, 200)
+        self.assertEqual(db.calls[0][1], {"x_trace_id": "abc"})
+
+    def test_a_missing_required_header_is_422_through_handle(self):
+        endpoint = make(
+            path="/notes",
+            params={"x_trace_id": {"in": "header", "type": "str",
+                                   "required": True}},
+            query={"sql": "SELECT :x_trace_id AS t", "returns": "one"},
+        )
+        status, body = handle(endpoint, db=FakeDb(), headers={})
+        self.assertEqual(status, 422)
+        self.assertIn("x_trace_id", body["error"]["message"])
+
     def test_a_body_parameter_is_read_from_the_body(self):
         endpoint = make(
             method="POST", path="/notes",

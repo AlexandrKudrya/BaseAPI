@@ -305,6 +305,41 @@ class TestTransformHook(AppTestCase):
                          {"items": [{"id": 1}, {"id": 2}], "count": 2})
 
 
+class TestHeaderParameters(AppTestCase):
+    def build(self):
+        super().build()
+        self.project.write("endpoints/echo_trace.yml", """
+            name: echo_trace
+            method: GET
+            path: /trace
+            params:
+              x_trace_id: { in: header, type: str, required: true }
+            query:
+              sql: "SELECT :x_trace_id AS trace"
+              returns: one
+            response:
+              fields:
+                trace: "row.trace"
+        """)
+
+    def test_a_header_parameter_reaches_the_query(self):
+        response = self.client().get("/trace",
+                                     headers={"X-Trace-Id": "abc123"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"trace": "abc123"})
+
+    def test_the_header_name_is_matched_case_insensitively_over_http(self):
+        response = self.client().get("/trace",
+                                     headers={"x-TRACE-id": "abc123"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"trace": "abc123"})
+
+    def test_a_missing_required_header_is_422(self):
+        response = self.client().get("/trace")
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("x_trace_id", response.json()["error"]["message"])
+
+
 class TestStartupFailures(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

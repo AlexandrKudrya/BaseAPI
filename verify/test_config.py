@@ -254,6 +254,98 @@ class TestEndpointValidation(unittest.TestCase):
         self.assertRejects(endpoint_data(response={"transform": "hooks"}))
 
 
+class TestNonStringScalars(unittest.TestCase):
+    """YAML happily produces bools and ints where a string was meant.
+    Every one of those must come back as a ConfigError, never as a raw
+    TypeError or AttributeError from deep inside the parser."""
+
+    def assertConfigError(self, data):
+        with self.assertRaises(ConfigError):
+            load_endpoint(data)
+
+    def test_a_non_string_name(self):
+        self.assertConfigError(endpoint_data(name=123))
+
+    def test_a_non_string_method(self):
+        self.assertConfigError(endpoint_data(method=123))
+
+    def test_a_non_string_path(self):
+        self.assertConfigError(endpoint_data(
+            path=123, params={},
+            query={"sql": "SELECT 1 AS n", "returns": "one"}))
+
+    def test_a_non_string_summary(self):
+        self.assertConfigError(endpoint_data(summary=123))
+
+    def test_a_non_string_sql(self):
+        self.assertConfigError(endpoint_data(
+            query={"sql": 123, "returns": "one"}))
+
+    def test_a_non_string_returns(self):
+        self.assertConfigError(endpoint_data(
+            query={"sql": "SELECT 1 AS n", "returns": 1}))
+
+    def test_a_boolean_when_expression(self):
+        # `when: true` is an easy slip: YAML turns it into a bool, and the
+        # tokenizer must not be handed a non-string.
+        self.assertConfigError(endpoint_data(checks=[
+            {"when": True, "status": 400, "message": "no"}]))
+
+    def test_a_numeric_when_expression(self):
+        self.assertConfigError(endpoint_data(checks=[
+            {"when": 1, "status": 400, "message": "no"}]))
+
+    def test_a_non_string_hook_reference(self):
+        self.assertConfigError(endpoint_data(checks=[
+            {"hook": 123, "status": 400, "message": "no"}]))
+
+    def test_a_non_integer_check_status(self):
+        self.assertConfigError(endpoint_data(checks=[
+            {"when": "params.note_id > 0", "status": "400"}]))
+
+    def test_a_non_string_check_message(self):
+        self.assertConfigError(endpoint_data(checks=[
+            {"when": "params.note_id > 0", "status": 400, "message": 5}]))
+
+    def test_a_non_string_response_field_expression(self):
+        self.assertConfigError(endpoint_data(
+            response={"fields": {"id": True}}))
+
+    def test_a_non_string_transform_reference(self):
+        self.assertConfigError(endpoint_data(response={"transform": 5}))
+
+    def test_a_non_integer_response_status(self):
+        self.assertConfigError(endpoint_data(response={"status": "200"}))
+
+    def test_a_non_integer_when_empty(self):
+        self.assertConfigError(endpoint_data(response={"when_empty": "404"}))
+
+    def test_a_non_string_param_location_or_type(self):
+        self.assertConfigError(endpoint_data(
+            params={"note_id": {"in": 1, "type": "int"}}))
+        self.assertConfigError(endpoint_data(
+            params={"note_id": {"in": "path", "type": 1}}))
+
+    def test_a_non_boolean_required_flag(self):
+        self.assertConfigError(endpoint_data(
+            params={"note_id": {"in": "path", "type": "int",
+                                "required": "yes"}}))
+
+    def test_a_section_that_should_be_a_mapping_but_is_not(self):
+        self.assertConfigError(endpoint_data(params=["note_id"]))
+        self.assertConfigError(endpoint_data(query="SELECT 1"))
+        self.assertConfigError(endpoint_data(response=["status"]))
+
+    def test_checks_that_are_not_a_list_of_mappings(self):
+        self.assertConfigError(endpoint_data(checks={"when": "true"}))
+        self.assertConfigError(endpoint_data(checks=["params.note_id > 0"]))
+
+    def test_the_whole_document_not_being_a_mapping(self):
+        for data in ([1, 2], "text", 7, None):
+            with self.subTest(data=data):
+                self.assertConfigError(data)
+
+
 class TestChecks(unittest.TestCase):
     def test_checks_keep_their_file_order(self):
         ep = load_endpoint(endpoint_data(checks=[
