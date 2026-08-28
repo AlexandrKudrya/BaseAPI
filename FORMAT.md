@@ -154,6 +154,41 @@ def is_admin(ctx):
     return "admin" in ctx["auth"]["roles"]
 ```
 
+## Checking a project
+
+```
+python -m baseapi.check <directory>
+```
+
+Exit code `0` and a table of routes, or exit code `1` and a list of problems.
+It runs three layers in order, because each is only meaningful once the
+previous one holds:
+
+1. the YAML loads and validates;
+2. every `hook` and `transform` reference resolves to a real callable;
+3. every statement compiles against the real schema.
+
+The third layer is the reason the command exists. A misspelt column is
+invisible to the config layer and only surfaces when someone calls the
+endpoint. SQLite's `EXPLAIN` prepares a statement — resolving tables and
+columns — without executing it, so a broken `INSERT` or `DELETE` is reported
+without touching a row:
+
+```
+FAILED
+  get_note: cannot import hook module 'hooks': No module named 'hooks'
+  list_notes: no such column: titel
+  get_note: no such table: notez
+
+3 problem(s)
+```
+
+For a PostgreSQL project the third layer is skipped — it would need a live
+server — and the report says so. Layers 1 and 2 still run.
+
+Note that for a file-backed SQLite URL the check connects, which creates the
+file and runs `init_sql` if the database is not there yet.
+
 ## Non-goals
 
 Deliberately not implemented, so do not look for them:
@@ -171,4 +206,5 @@ Deliberately not implemented, so do not look for them:
 - no arithmetic, function calls, indexing or slicing in the expression
   language;
 - no async database drivers; handlers are synchronous;
-- no CLI; the framework is used as `create_app(directory)`.
+- no CLI beyond `baseapi.check` — no `run`, no scaffolding, no code
+  generation; the framework itself is used as `create_app(directory)`.

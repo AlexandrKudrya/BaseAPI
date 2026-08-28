@@ -154,7 +154,11 @@ Nothing in this list gets implemented, however small it looks.
 - **No arithmetic, function calls, string methods, indexing or slicing in the
   expression language.**
 - **No async database drivers.** Handlers are synchronous.
-- **No CLI.** The framework is used as `create_app(directory)`.
+- **No CLI beyond `python -m baseapi.check <dir>`** — no `run` command, no
+  scaffolding, no code generation. The framework itself is used as
+  `create_app(directory)`. (`baseapi.check` was added after the original
+  delivery, so that an agent writing YAML has a pass/fail gate; see
+  `FORMAT.md`.)
 
 ## Stack and constraints
 
